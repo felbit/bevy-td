@@ -17,6 +17,10 @@ pub struct Lifetime {
     timer: Timer,
 }
 
+pub struct GameAssets {
+    bullet_scene: Handle<Scene>,
+}
+
 fn main() {
     App::new()
         .insert_resource(ClearColor(Color::rgb(0.2, 0.2, 0.2)))
@@ -29,6 +33,7 @@ fn main() {
         })
         .add_startup_system(spawn_basic_scene)
         .add_startup_system(spawn_camera)
+        .add_startup_system(asset_loading)
         .add_plugins(DefaultPlugins)
         .add_plugin(WorldInspectorPlugin::new())
         .register_type::<Tower>()
@@ -82,11 +87,16 @@ fn spawn_basic_scene(
         .insert(Name::new("Light"));
 }
 
+fn asset_loading(mut commands: Commands, assets: Res<AssetServer>) {
+    commands.insert_resource(GameAssets {
+        bullet_scene: assets.load("Bullet.glb#Scene0"),
+    });
+}
+
 fn tower_shooting(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut towers: Query<&mut Tower>,
+    bullet_assets: Res<GameAssets>,
     time: Res<Time>,
 ) {
     for mut tower in &mut towers {
@@ -95,9 +105,8 @@ fn tower_shooting(
             let spawn_transform =
                 Transform::from_xyz(0.0, 0.7, 0.6).with_rotation(Quat::from_rotation_y(-PI / 2.0));
             commands
-                .spawn_bundle(PbrBundle {
-                    mesh: meshes.add(Mesh::from(shape::Cube { size: 0.1 })),
-                    material: materials.add(Color::rgb(0.87, 0.44, 0.42).into()),
+                .spawn_bundle(SceneBundle {
+                    scene: bullet_assets.bullet_scene.clone(),
                     transform: spawn_transform,
                     ..default()
                 })
