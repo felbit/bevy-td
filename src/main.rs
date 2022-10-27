@@ -1,25 +1,24 @@
-use std::f32::consts::PI;
+mod bullet;
+mod target;
+mod tower;
 
-use bevy::prelude::*;
-use bevy_inspector_egui::WorldInspectorPlugin;
+mod prelude {
+    pub use bevy::{prelude::*, utils::FloatOrd};
+    pub use bevy_inspector_egui::WorldInspectorPlugin;
+
+    pub use crate::bullet::*;
+    pub use crate::target::*;
+    pub use crate::tower::*;
+}
+
+use prelude::*;
 
 pub const HEIGHT: f32 = 720.0;
 pub const WIDTH: f32 = 1280.0;
 
-#[derive(Component, Default, Reflect)]
-#[reflect(Component)]
-pub struct Tower {
-    shooting_timer: Timer,
-}
-
-#[derive(Component, Default, Reflect)]
-pub struct Lifetime {
-    timer: Timer,
-}
-
-pub struct GameAssets {
-    bullet_scene: Handle<Scene>,
-}
+// pub struct GameAssets {
+//     bullet_scene: Handle<Scene>,
+// }
 
 fn main() {
     App::new()
@@ -31,14 +30,14 @@ fn main() {
             resizable: false,
             ..Default::default()
         })
-        .add_startup_system(spawn_basic_scene)
-        .add_startup_system(spawn_camera)
-        .add_startup_system(asset_loading)
         .add_plugins(DefaultPlugins)
         .add_plugin(WorldInspectorPlugin::new())
-        .register_type::<Tower>()
-        .add_system(tower_shooting)
-        .add_system(bullet_despawn)
+        .add_plugin(BulletPlugin)
+        .add_plugin(TargetPlugin)
+        .add_plugin(TowerPlugin)
+        .add_startup_system(spawn_basic_scene)
+        .add_startup_system(spawn_camera)
+        //.add_startup_system(asset_loading)
         .run();
 }
 
@@ -66,11 +65,25 @@ fn spawn_basic_scene(
         .spawn_bundle(PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
             material: materials.add(Color::rgb(0.67, 0.84, 0.92).into()),
-            transform: Transform::from_xyz(0.0, 0.5, 0.0),
+            transform: Transform::from_xyz(1.0, 0.5, 0.0),
             ..default()
         })
         .insert(Tower {
             shooting_timer: Timer::from_seconds(1.0, true),
+            bullet_offset: Vec3::new(0.0, 0.2, 0.5),
+        })
+        .insert(Name::new("Tower"));
+
+    commands
+        .spawn_bundle(PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
+            material: materials.add(Color::rgb(0.67, 0.84, 0.92).into()),
+            transform: Transform::from_xyz(-1.0, 0.5, 0.0),
+            ..default()
+        })
+        .insert(Tower {
+            shooting_timer: Timer::from_seconds(1.0, true),
+            bullet_offset: Vec3::new(0.0, 0.2, 0.5),
         })
         .insert(Name::new("Tower"));
 
@@ -85,48 +98,53 @@ fn spawn_basic_scene(
             ..default()
         })
         .insert(Name::new("Light"));
+
+    // Targets
+    // TODO: make spawner for these!
+    commands
+        .spawn_bundle(PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Cube { size: 0.3 })),
+            material: materials.add(Color::rgb(0.67, 0.84, 0.92).into()),
+            transform: Transform::from_xyz(-2.0, 0.2, 1.5),
+            ..default()
+        })
+        .insert(Target { speed: 0.2 })
+        .insert(Health { value: 3 })
+        .insert(Name::new("Target"));
+    commands
+        .spawn_bundle(PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Cube { size: 0.3 })),
+            material: materials.add(Color::rgb(0.67, 0.84, 0.92).into()),
+            transform: Transform::from_xyz(-2.0, 1.2, 1.5),
+            ..default()
+        })
+        .insert(Target { speed: 0.4 })
+        .insert(Health { value: 3 })
+        .insert(Name::new("Target"));
+    commands
+        .spawn_bundle(PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Cube { size: 0.3 })),
+            material: materials.add(Color::rgb(0.67, 0.84, 0.92).into()),
+            transform: Transform::from_xyz(-1.8, 0.1, 1.5),
+            ..default()
+        })
+        .insert(Target { speed: 0.3 })
+        .insert(Health { value: 3 })
+        .insert(Name::new("Target"));
+    commands
+        .spawn_bundle(PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Cube { size: 0.3 })),
+            material: materials.add(Color::rgb(0.67, 0.84, 0.92).into()),
+            transform: Transform::from_xyz(-2.3, 0.5, 1.5),
+            ..default()
+        })
+        .insert(Target { speed: 0.5 })
+        .insert(Health { value: 3 })
+        .insert(Name::new("Target"));
 }
 
-fn asset_loading(mut commands: Commands, assets: Res<AssetServer>) {
-    commands.insert_resource(GameAssets {
-        bullet_scene: assets.load("Bullet.glb#Scene0"),
-    });
-}
-
-fn tower_shooting(
-    mut commands: Commands,
-    mut towers: Query<&mut Tower>,
-    bullet_assets: Res<GameAssets>,
-    time: Res<Time>,
-) {
-    for mut tower in &mut towers {
-        tower.shooting_timer.tick(time.delta());
-        if tower.shooting_timer.just_finished() {
-            let spawn_transform =
-                Transform::from_xyz(0.0, 0.7, 0.6).with_rotation(Quat::from_rotation_y(-PI / 2.0));
-            commands
-                .spawn_bundle(SceneBundle {
-                    scene: bullet_assets.bullet_scene.clone(),
-                    transform: spawn_transform,
-                    ..default()
-                })
-                .insert(Lifetime {
-                    timer: Timer::from_seconds(0.5, false),
-                })
-                .insert(Name::new("Bullet"));
-        }
-    }
-}
-
-fn bullet_despawn(
-    mut commands: Commands,
-    mut bullets: Query<(Entity, &mut Lifetime)>,
-    time: Res<Time>,
-) {
-    for (entity, mut lifetime) in &mut bullets {
-        lifetime.timer.tick(time.delta());
-        if lifetime.timer.just_finished() {
-            commands.entity(entity).despawn_recursive();
-        }
-    }
-}
+// fn asset_loading(mut commands: Commands, assets: Res<AssetServer>) {
+//     commands.insert_resource(GameAssets {
+//         bullet_scene: assets.load("Bullet.glb#Scene0"),
+//     });
+// }
