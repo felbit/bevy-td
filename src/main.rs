@@ -1,24 +1,26 @@
 mod bullet;
+mod physics;
 mod target;
 mod tower;
 
 mod prelude {
     pub use bevy::{prelude::*, utils::FloatOrd};
     pub use bevy_inspector_egui::WorldInspectorPlugin;
+    pub use bevy_rapier3d::{
+        prelude::{NoUserData, RapierConfiguration, RapierPhysicsPlugin},
+        render::RapierDebugRenderPlugin,
+    };
+
+    pub const HEIGHT: f32 = 720.0;
+    pub const WIDTH: f32 = 1280.0;
 
     pub use crate::bullet::*;
+    pub use crate::physics::*;
     pub use crate::target::*;
     pub use crate::tower::*;
 }
 
 use prelude::*;
-
-pub const HEIGHT: f32 = 720.0;
-pub const WIDTH: f32 = 1280.0;
-
-// pub struct GameAssets {
-//     bullet_scene: Handle<Scene>,
-// }
 
 fn main() {
     App::new()
@@ -32,12 +34,14 @@ fn main() {
         })
         .add_plugins(DefaultPlugins)
         .add_plugin(WorldInspectorPlugin::new())
+        .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
+        //.add_plugin(RapierDebugRenderPlugin::default())
+        .add_plugin(TowerPlugin)
         .add_plugin(BulletPlugin)
         .add_plugin(TargetPlugin)
-        .add_plugin(TowerPlugin)
+        .add_plugin(PhysicsPlugin)
         .add_startup_system(spawn_basic_scene)
         .add_startup_system(spawn_camera)
-        //.add_startup_system(asset_loading)
         .run();
 }
 
@@ -52,11 +56,15 @@ fn spawn_basic_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut rapier_cfg: ResMut<RapierConfiguration>,
 ) {
+    // set gravity
+    rapier_cfg.gravity = Vec3::ZERO;
+
     commands
         .spawn_bundle(PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Plane { size: 5.0 })),
-            material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
+            mesh: meshes.add(Mesh::from(shape::Plane { size: 10.0 })),
+            material: materials.add(Color::rgb(0.337, 0.49, 0.275).into()),
             ..default()
         })
         .insert(Name::new("Ground"));
@@ -69,6 +77,7 @@ fn spawn_basic_scene(
             ..default()
         })
         .insert(Tower {
+            shooting_range: 2.0,
             shooting_timer: Timer::from_seconds(1.0, true),
             bullet_offset: Vec3::new(0.0, 0.2, 0.5),
         })
@@ -82,6 +91,7 @@ fn spawn_basic_scene(
             ..default()
         })
         .insert(Tower {
+            shooting_range: 2.0,
             shooting_timer: Timer::from_seconds(1.0, true),
             bullet_offset: Vec3::new(0.0, 0.2, 0.5),
         })
@@ -108,9 +118,11 @@ fn spawn_basic_scene(
             transform: Transform::from_xyz(-2.0, 0.2, 1.5),
             ..default()
         })
+        .insert_bundle(PhysicsBundle::moving_entity(Vec3::new(0.2, 0.2, 0.2)))
         .insert(Target { speed: 0.2 })
         .insert(Health { value: 3 })
         .insert(Name::new("Target"));
+
     commands
         .spawn_bundle(PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Cube { size: 0.3 })),
@@ -118,9 +130,11 @@ fn spawn_basic_scene(
             transform: Transform::from_xyz(-2.0, 1.2, 1.5),
             ..default()
         })
+        .insert_bundle(PhysicsBundle::moving_entity(Vec3::new(0.4, 0.4, 0.4)))
         .insert(Target { speed: 0.4 })
         .insert(Health { value: 3 })
         .insert(Name::new("Target"));
+
     commands
         .spawn_bundle(PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Cube { size: 0.3 })),
@@ -128,9 +142,11 @@ fn spawn_basic_scene(
             transform: Transform::from_xyz(-1.8, 0.1, 1.5),
             ..default()
         })
+        .insert_bundle(PhysicsBundle::moving_entity(Vec3::new(0.4, 0.4, 0.4)))
         .insert(Target { speed: 0.3 })
         .insert(Health { value: 3 })
         .insert(Name::new("Target"));
+
     commands
         .spawn_bundle(PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Cube { size: 0.3 })),
@@ -138,13 +154,8 @@ fn spawn_basic_scene(
             transform: Transform::from_xyz(-2.3, 0.5, 1.5),
             ..default()
         })
+        .insert_bundle(PhysicsBundle::moving_entity(Vec3::new(0.4, 0.4, 0.4)))
         .insert(Target { speed: 0.5 })
         .insert(Health { value: 3 })
         .insert(Name::new("Target"));
 }
-
-// fn asset_loading(mut commands: Commands, assets: Res<AssetServer>) {
-//     commands.insert_resource(GameAssets {
-//         bullet_scene: assets.load("Bullet.glb#Scene0"),
-//     });
-// }
