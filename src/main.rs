@@ -6,6 +6,7 @@ mod tower;
 mod prelude {
     pub use bevy::{prelude::*, utils::FloatOrd};
     pub use bevy_inspector_egui::WorldInspectorPlugin;
+    pub use bevy_mod_picking::*;
     pub use bevy_rapier3d::{
         prelude::{NoUserData, RapierConfiguration, RapierPhysicsPlugin},
         render::RapierDebugRenderPlugin,
@@ -26,6 +27,7 @@ mod prelude {
     }
 }
 
+use bevy::pbr::NotShadowCaster;
 use prelude::*;
 
 fn main() {
@@ -39,7 +41,8 @@ fn main() {
             ..Default::default()
         })
         .add_plugins(DefaultPlugins)
-        .add_plugin(WorldInspectorPlugin::new())
+        .add_plugins(DefaultPickingPlugins)
+        //.add_plugin(WorldInspectorPlugin::new())
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         //.add_plugin(RapierDebugRenderPlugin::default())
         .add_plugin(TowerPlugin)
@@ -51,6 +54,7 @@ fn main() {
         .add_startup_system(spawn_camera)
         .add_system(bevy::window::close_on_esc)
         .add_system(camera_controls)
+        .add_system(what_is_selected)
         .run();
 }
 
@@ -134,13 +138,46 @@ fn spawn_basic_scene(
         })
         .insert(Name::new("Ground"));
 
+    // clickable tower construction sites
+    let default_collider_color = materials.add(Color::rgba(0.3, 0.5, 0.3, 0.3).into());
+    let selected_collider_color = materials.add(Color::rgba(0.3, 0.9, 0.3, 0.9).into());
+    commands
+        .spawn_bundle(SpatialBundle::from_transform(Transform::from_xyz(
+            0.0, 0.8, 0.0,
+        )))
+        .insert(Name::new("Construction Site"))
+        .insert(meshes.add(shape::Capsule::default().into()))
+        .insert(Highlighting {
+            initial: default_collider_color.clone(),
+            hovered: Some(selected_collider_color.clone()),
+            pressed: Some(selected_collider_color.clone()),
+            selected: Some(selected_collider_color),
+        })
+        .insert(default_collider_color)
+        .insert(NotShadowCaster)
+        .insert_bundle(PickableBundle::default())
+        .with_children(|commands| {
+            commands
+                .spawn_bundle(SceneBundle {
+                    scene: game_assets.construction_site_scene.clone(),
+                    transform: Transform::from_xyz(0.0, -0.8, 0.0),
+                    ..default()
+                })
+                .insert(Name::new("Construction Site"));
+        });
+
     commands
         .spawn_bundle(SceneBundle {
-            scene: game_assets.construction_site_scene.clone(),
-            transform: Transform::from_xyz(-1.0, 0.0, 0.0),
+            scene: game_assets.tower_scene.clone(),
+            transform: Transform::from_xyz(-1.5, 0.0, 0.0),
             ..default()
         })
-        .insert(Name::new("Construction Site"));
+        .insert(Tower {
+            shooting_range: 2.0,
+            shooting_timer: Timer::from_seconds(1.0, true),
+            bullet_offset: Vec3::new(0., 1., 0.5),
+        })
+        .insert(Name::new("Tower"));
 
     commands
         .spawn_bundle(SceneBundle {
@@ -157,14 +194,27 @@ fn spawn_basic_scene(
 
     // More Light!
     commands.insert_resource(AmbientLight {
-        color: Color::GOLD,
-        brightness: 0.2,
+        color: Color::CYAN,
+        brightness: 0.05,
     });
 
     commands
         .spawn_bundle(PointLightBundle {
             point_light: PointLight {
-                intensity: 1600.0,
+                intensity: 900.0,
+                shadows_enabled: true,
+                color: Color::GOLD,
+                ..default()
+            },
+            transform: Transform::from_xyz(3.0, 1.0, 3.3),
+            ..default()
+        })
+        .insert(Name::new("Light"));
+
+    commands
+        .spawn_bundle(PointLightBundle {
+            point_light: PointLight {
+                intensity: 1900.0,
                 shadows_enabled: true,
                 color: Color::rgb(196. / 255., 170. / 255., 132. / 255.),
                 ..default()
@@ -190,7 +240,7 @@ fn spawn_basic_scene(
     commands
         .spawn_bundle(SceneBundle {
             scene: game_assets.target_scene.clone(),
-            transform: Transform::from_xyz(-2.0, 1.2, 1.5).with_scale(Vec3::new(0.38, 0.38, 0.38)),
+            transform: Transform::from_xyz(-1.0, 1.2, 1.5).with_scale(Vec3::new(0.38, 0.38, 0.38)),
             ..default()
         })
         .insert_bundle(PhysicsBundle::moving_entity(Vec3::new(0.4, 0.4, 0.4)))
@@ -201,7 +251,7 @@ fn spawn_basic_scene(
     commands
         .spawn_bundle(SceneBundle {
             scene: game_assets.target_scene.clone(),
-            transform: Transform::from_xyz(-1.8, 0.1, 1.5).with_scale(Vec3::new(0.38, 0.38, 0.38)),
+            transform: Transform::from_xyz(-3.8, 0.1, 1.5).with_scale(Vec3::new(0.38, 0.38, 0.38)),
             ..default()
         })
         .insert_bundle(PhysicsBundle::moving_entity(Vec3::new(0.4, 0.4, 0.4)))
@@ -212,11 +262,63 @@ fn spawn_basic_scene(
     commands
         .spawn_bundle(SceneBundle {
             scene: game_assets.target_scene.clone(),
-            transform: Transform::from_xyz(-2.3, 0.5, 1.5).with_scale(Vec3::new(0.38, 0.38, 0.38)),
+            transform: Transform::from_xyz(-4.3, 0.5, 1.5).with_scale(Vec3::new(0.38, 0.38, 0.38)),
             ..default()
         })
         .insert_bundle(PhysicsBundle::moving_entity(Vec3::new(0.4, 0.4, 0.4)))
         .insert(Target { speed: 0.5 })
         .insert(Health { value: 3 })
         .insert(Name::new("Target"));
+
+    commands
+        .spawn_bundle(SceneBundle {
+            scene: game_assets.target_scene.clone(),
+            transform: Transform::from_xyz(-2.7, 0.2, 1.5).with_scale(Vec3::new(0.38, 0.38, 0.38)),
+            ..default()
+        })
+        .insert_bundle(PhysicsBundle::moving_entity(Vec3::new(0.2, 0.2, 0.2)))
+        .insert(Target { speed: 0.2 })
+        .insert(Health { value: 3 })
+        .insert(Name::new("Target"));
+
+    commands
+        .spawn_bundle(SceneBundle {
+            scene: game_assets.target_scene.clone(),
+            transform: Transform::from_xyz(-3.0, 1.2, 1.5).with_scale(Vec3::new(0.38, 0.38, 0.38)),
+            ..default()
+        })
+        .insert_bundle(PhysicsBundle::moving_entity(Vec3::new(0.4, 0.4, 0.4)))
+        .insert(Target { speed: 0.4 })
+        .insert(Health { value: 3 })
+        .insert(Name::new("Target"));
+
+    commands
+        .spawn_bundle(SceneBundle {
+            scene: game_assets.target_scene.clone(),
+            transform: Transform::from_xyz(-2.8, 0.1, 1.5).with_scale(Vec3::new(0.38, 0.38, 0.38)),
+            ..default()
+        })
+        .insert_bundle(PhysicsBundle::moving_entity(Vec3::new(0.4, 0.4, 0.4)))
+        .insert(Target { speed: 0.3 })
+        .insert(Health { value: 3 })
+        .insert(Name::new("Target"));
+
+    commands
+        .spawn_bundle(SceneBundle {
+            scene: game_assets.target_scene.clone(),
+            transform: Transform::from_xyz(-1.3, 0.5, 1.5).with_scale(Vec3::new(0.38, 0.38, 0.38)),
+            ..default()
+        })
+        .insert_bundle(PhysicsBundle::moving_entity(Vec3::new(0.4, 0.4, 0.4)))
+        .insert(Target { speed: 0.5 })
+        .insert(Health { value: 3 })
+        .insert(Name::new("Target"));
+}
+
+fn what_is_selected(selection: Query<(&Name, &Selection)>) {
+    for (name, selection) in &selection {
+        if selection.selected() {
+            info!("{}", name);
+        }
+    }
 }
